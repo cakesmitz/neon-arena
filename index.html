@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Неон Арена — мультиплеер</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#090d18;color:#fff;font-family:Arial,sans-serif;text-align:center}
+main{width:min(100%,900px);margin:auto;padding:10px}h1{margin:5px}
+.row{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin:10px}
+input,button{border:0;border-radius:9px;padding:11px;font-size:15px}input{width:130px;background:#eaf1ff}
+button{background:#367cf6;color:white;font-weight:bold;cursor:pointer}
+#status{color:#a9d9ff;min-height:20px;font-size:14px}
+canvas{width:100%;height:auto;aspect-ratio:16/10;background:#101a2c;border:2px solid #35466b;border-radius:14px;touch-action:none}
+.hint{color:#bdc9df;font-size:13px}
+</style></head>
+<body><main>
+<h1>⚡ НЕОН АРЕНА — ONLINE</h1>
+<div class="row">
+<input id="name" maxlength="12" placeholder="Твой ник">
+<input id="room" maxlength="12" placeholder="Комната">
+<button id="join">Войти в комнату</button>
+</div>
+<div id="status">Подключение к серверу...</div>
+<div class="row"><b>❤️ Жизни: <span id="hp">100</span></b><b>🏆 Очки: <span id="score">0</span></b><b>👥 Игроков: <span id="count">0</span></b></div>
+<p class="hint">WASD / стрелки — движение · мышь — прицел · удерживай клик или пробел — стрелять. На телефоне можно вести пальцем по полю.</p>
+<canvas id="game" width="800" height="500"></canvas>
+<p class="hint">Играй с другом: оба введите одинаковый код комнаты.</p>
+</main>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+(()=>{
+const socket=io();const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
+const $=id=>document.getElementById(id);
+let joined=false,myId=null,players={},bullets=[],keys={},aim={x:600,y:250},fire=false,lastShot=0,hp=100,score=0;
+function status(t){$('status').textContent=t}
+socket.on('connect',()=>status('Сервер подключён. Введи ник и комнату.'));
+socket.on('connect_error',()=>status('Не удалось подключиться к серверу. Проверь адрес сервера.'));
+socket.on('joined',d=>{joined=true;myId=d.id;players=d.players;status('Ты в комнате '+d.room+'. Ждём друга!');});
+socket.on('state',d=>{players=d.players;bullets=d.bullets;});
+socket.on('notice',t=>status(t));
+socket.on('hit',d=>{if(d.id===myId){hp=d.hp;$('hp').textContent=hp;}});
+socket.on('score',d=>{if(d.id===myId){score=d.score;$('score').textContent=score;}});
+$('join').onclick=()=>{if(!socket.connected){status('Нет соединения с сервером.');return;}socket.emit('join',{name:$('name').value.trim()||'Игрок',room:$('room').value.trim()||'arena'});};
+function pointer(e){let r=canvas.getBoundingClientRect();aim={x:(e.clientX-r.left)*800/r.width,y:(e.clientY-r.top)*500/r.height};}
+canvas.addEventListener('pointermove',pointer);
+canvas.addEventListener('pointerdown',e=>{pointer(e);fire=true;canvas.setPointerCapture(e.pointerId);});
+canvas.addEventListener('pointerup',()=>fire=false);canvas.addEventListener('pointercancel',()=>fire=false);
+onkeydown=e=>{keys[e.key.toLowerCase()]=true;if(e.key===' ')e.preventDefault();};
+onkeyup=e=>keys[e.key.toLowerCase()]=false;
+setInterval(()=>{if(!joined)return;let dx=(keys.d||keys.arrowright?1:0)-(keys.a||keys.arrowleft?1:0),dy=(keys.s||keys.arrowdown?1:0)-(keys.w||keys.arrowup?1:0),n=Math.hypot(dx,dy)||1;if(n>1){dx/=n;dy/=n;}socket.emit('move',{dx,dy,aim});if((fire||keys[' '])&&Date.now()-lastShot>180){lastShot=Date.now();socket.emit('shoot',{aim});}},40);
+function draw(){
+ctx.fillStyle='#101a2c';ctx.fillRect(0,0,800,500);ctx.strokeStyle='#1c2b46';
+for(let x=0;x<800;x+=40){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,500);ctx.stroke();}
+for(let y=0;y<500;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(800,y);ctx.stroke();}
+for(const b of bullets){ctx.fillStyle='#ffe98a';ctx.beginPath();ctx.arc(b.x,b.y,5,0,7);ctx.fill();}
+for(const p of Object.values(players)){ctx.fillStyle=p.id===myId?'#22c9f2':'#ff5478';ctx.shadowBlur=15;ctx.shadowColor=ctx.fillStyle;ctx.beginPath();ctx.arc(p.x,p.y,18,0,7);ctx.fill();ctx.shadowBlur=0;ctx.fillStyle='white';ctx.font='13px Arial';ctx.textAlign='center';ctx.fillText(p.name,p.x,p.y-26);ctx.fillStyle='#cbd5e1';ctx.fillRect(p.x-20,p.y+23,40,5);ctx.fillStyle='#55e68a';ctx.fillRect(p.x-20,p.y+23,40*Math.max(0,p.hp)/100,5);}
+$('count').textContent=Object.keys(players).length;
+if(!joined){ctx.fillStyle='#fff';ctx.textAlign='center';ctx.font='bold 28px Arial';ctx.fillText('ВВЕДИ КОМНАТУ И НАЖМИ «ВОЙТИ»',400,245);}
+requestAnimationFrame(draw);
+}draw();
+})();
+</script></body></html>
